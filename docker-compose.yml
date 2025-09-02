@@ -1,0 +1,155 @@
+version: '3.8'
+
+services:
+  # Servicio Redis - Base de datos en memoria para el caché
+  redis:
+    image: redis:7-alpine
+    container_name: distributed-cache-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./docker/redis.conf:/usr/local/etc/redis/redis.conf
+      - redis_data:/data
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - cache_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Servicio de caché distribuido
+  cache-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: distributed-cache-server
+    ports:
+      - "8080:8080"
+    environment:
+      # Configuración del servidor
+      - DC_SERVER_HOST=0.0.0.0
+      - DC_SERVER_PORT=8080
+      - DC_SERVER_READ_TIMEOUT=30s
+      - DC_SERVER_WRITE_TIMEOUT=30s
+      - DC_SERVER_IDLE_TIMEOUT=120s
+
+      # Configuración de Redis
+      - DC_CACHE_ADDRESSES=redis:6379
+      - DC_CACHE_PASSWORD=
+      - DC_CACHE_DATABASE=0
+      - DC_CACHE_MAX_RETRIES=3
+      - DC_CACHE_POOL_SIZE=20
+      - DC_CACHE_MIN_IDLE_CONNS=10
+      - DC_CACHE_DIAL_TIMEOUT=5s
+      - DC_CACHE_READ_TIMEOUT=3s
+      - DC_CACHE_WRITE_TIMEOUT=3s
+      - DC_CACHE_POOL_TIMEOUT=4s
+
+      # Configuración del logger
+      - DC_LOGGER_LEVEL=info
+      - DC_LOGGER_FORMAT=json
+      - DC_LOGGER_OUTPUT_PATH=stdout
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cache_network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Servicio adicional para testing y monitoreo (opcional)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: redis-commander
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin
+    depends_on:
+      - redis
+    networks:
+      - cache_network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Nginx como load balancer para múltiples instancias del cache server
+  nginx:
+    image: nginx:alpine
+    container_name: cache-load-balancer
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - cache-server
+    networks:
+      - cache_network
+    restart: unless-stopped
+    profiles:
+      - loadbalancer
+
+# Múltiples instancias del servidor de caché para testing de escalabilidad
+  cache-server-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: distributed-cache-server-2
+    ports:
+      - "8082:8080"
+    environment:
+      - DC_SERVER_HOST=0.0.0.0
+      - DC_SERVER_PORT=8080
+      - DC_CACHE_ADDRESSES=redis:6379
+      - DC_LOGGER_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cache_network
+    restart: unless-stopped
+    profiles:
+      - cluster
+
+  cache-server-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: distributed-cache-server-3
+    ports:
+      - "8083:8080"
+    environment:
+      - DC_SERVER_HOST=0.0.0.0
+      - DC_SERVER_PORT=8080
+      - DC_CACHE_ADDRESSES=redis:6379
+      - DC_LOGGER_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cache_network
+    restart: unless-stopped
+    profiles:
+      - cluster
+
+# Volúmenes persistentes
+volumes:
+  redis_data:
+    driver: local
+
+# Red personalizada
+networks:
+  cache_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
