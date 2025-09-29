@@ -14,7 +14,7 @@ services:
     networks:
       - cache_network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ping || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -53,12 +53,11 @@ services:
       - DC_LOGGER_FORMAT=json
       - DC_LOGGER_OUTPUT_PATH=stdout
     depends_on:
-      redis:
-        condition: service_healthy
+      - redis
     networks:
       - cache_network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -79,8 +78,6 @@ services:
     networks:
       - cache_network
     restart: unless-stopped
-    profiles:
-      - monitoring
 
   # Nginx como load balancer para múltiples instancias del cache server
   nginx:
@@ -95,8 +92,6 @@ services:
     networks:
       - cache_network
     restart: unless-stopped
-    profiles:
-      - loadbalancer
 
 # Múltiples instancias del servidor de caché para testing de escalabilidad
   cache-server-2:
@@ -112,13 +107,10 @@ services:
       - DC_CACHE_ADDRESSES=redis:6379
       - DC_LOGGER_LEVEL=info
     depends_on:
-      redis:
-        condition: service_healthy
+      - redis
     networks:
       - cache_network
     restart: unless-stopped
-    profiles:
-      - cluster
 
   cache-server-3:
     build:
@@ -133,13 +125,10 @@ services:
       - DC_CACHE_ADDRESSES=redis:6379
       - DC_LOGGER_LEVEL=info
     depends_on:
-      redis:
-        condition: service_healthy
+      - redis
     networks:
       - cache_network
     restart: unless-stopped
-    profiles:
-      - cluster
 
 # Volúmenes persistentes
 volumes:

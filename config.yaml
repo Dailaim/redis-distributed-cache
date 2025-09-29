@@ -9,7 +9,7 @@ server:
 # Configuración de Redis
 cache:
   addresses:
-    - "localhost:6379"
+    - "redis:6379"
   password: ""
   database: 0
   max_retries: 3
