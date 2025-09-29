@@ -1,0 +1,796 @@
+openapi: 3.0.3
+info:
+  title: Redis Distributed Cache API
+  description: |
+    API REST para un sistema de caché distribuido basado en Redis.
+    Permite operaciones CRUD sobre el caché con soporte para TTL y múltiples tipos de datos.
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:80
+    description: Load Balancer (Nginx)
+  - url: http://localhost:8080
+    description: Cache Server Instance 1
+  - url: http://localhost:8082
+    description: Cache Server Instance 2
+  - url: http://localhost:8083
+    description: Cache Server Instance 3
+
+tags:
+  - name: cache
+    description: Operaciones de caché
+  - name: health
+    description: Endpoints de salud y monitoreo
+  - name: stats
+    description: Estadísticas del caché
+
+paths:
+  /health:
+    get:
+      tags:
+        - health
+      summary: Verificar estado del servicio
+      description: Endpoint de health check para verificar que el servicio está funcionando
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Servicio funcionando correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Servicio no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ping:
+    get:
+      tags:
+        - health
+      summary: Ping básico
+      description: Endpoint simple de ping que retorna pong
+      operationId: ping
+      responses:
+        '200':
+          description: Respuesta de pong
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "pong"
+
+  /api/v1/cache/{key}:
+    get:
+      tags:
+        - cache
+      summary: Obtener valor del caché
+      description: Recupera un valor del caché usando su clave
+      operationId: getCacheValue
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Clave del elemento en el caché
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 250
+      responses:
+        '200':
+          description: Valor encontrado en el caché
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheValueResponse'
+        '404':
+          description: Clave no encontrada en el caché
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - cache
+      summary: Almacenar valor en el caché
+      description: Almacena un valor en el caché con una clave específica
+      operationId: setCacheValue
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Clave del elemento en el caché
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 250
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CacheValueRequest'
+      responses:
+        '200':
+          description: Valor almacenado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheOperationResponse'
+        '201':
+          description: Valor creado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheOperationResponse'
+        '400':
+          description: Datos de entrada inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - cache
+      summary: Eliminar valor del caché
+      description: Elimina un valor del caché usando su clave
+      operationId: deleteCacheValue
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Clave del elemento a eliminar del caché
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 250
+      responses:
+        '200':
+          description: Valor eliminado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheOperationResponse'
+        '404':
+          description: Clave no encontrada en el caché
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    head:
+      tags:
+        - cache
+      summary: Verificar existencia de una clave
+      description: Verifica si una clave existe en el caché
+      operationId: checkCacheKeyExists
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Clave del elemento a verificar
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 250
+      responses:
+        '200':
+          description: La clave existe
+        '404':
+          description: La clave no existe
+        '400':
+          description: Clave inválida
+        '500':
+          description: Error interno del servidor
+
+  /api/v1/cache/{key}/expire:
+    put:
+      tags:
+        - cache
+      summary: Establecer expiración de una clave
+      description: Establece el tiempo de vida (TTL) de una clave existente
+      operationId: setCacheExpiration
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Clave del elemento en el caché
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 250
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CacheTTLRequest'
+      responses:
+        '200':
+          description: Expiración establecida correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheOperationResponse'
+        '400':
+          description: Formato de TTL inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/cache/batch:
+    post:
+      tags:
+        - cache
+      summary: Almacenar múltiples valores
+      description: Almacena múltiples valores en el caché en una sola operación
+      operationId: setCacheMultiple
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CacheMultipleSetRequest'
+      responses:
+        '200':
+          description: Valores almacenados correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheMultipleOperationResponse'
+        '400':
+          description: Datos de entrada inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - cache
+      summary: Eliminar múltiples valores
+      description: Elimina múltiples valores del caché usando sus claves
+      operationId: deleteCacheMultiple
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CacheMultipleKeysRequest'
+      responses:
+        '200':
+          description: Valores eliminados correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheMultipleOperationResponse'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/cache/batch/get:
+    post:
+      tags:
+        - cache
+      summary: Obtener múltiples valores
+      description: Obtiene múltiples valores del caché usando sus claves
+      operationId: getCacheMultiple
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CacheMultipleKeysRequest'
+      responses:
+        '200':
+          description: Valores obtenidos correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheMultipleGetResponse'
+        '400':
+          description: Datos de entrada inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/cache/{key}/ttl:
+    get:
+      tags:
+        - cache
+      summary: Obtener TTL de una clave
+      description: Obtiene el tiempo de vida restante (TTL) de una clave en segundos
+      operationId: getCacheTTL
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Clave del elemento en el caché
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 250
+      responses:
+        '200':
+          description: TTL obtenido correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheTTLResponse'
+        '404':
+          description: Clave no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - cache
+      summary: Establecer TTL de una clave
+      description: Establece el tiempo de vida (TTL) de una clave existente en segundos
+      operationId: setCacheTTL
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Clave del elemento en el caché
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 250
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CacheTTLRequest'
+      responses:
+        '200':
+          description: TTL establecido correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheOperationResponse'
+        '404':
+          description: Clave no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/cache:
+    delete:
+      tags:
+        - cache
+      summary: Limpiar todo el caché
+      description: Elimina todas las claves del caché
+      operationId: flushCache
+      responses:
+        '200':
+          description: Caché limpiado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheOperationResponse'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/cache/keys:
+    get:
+      tags:
+        - cache
+      summary: Listar claves del caché
+      description: Obtiene una lista de claves que coinciden con un patrón
+      operationId: getCacheKeys
+      parameters:
+        - name: pattern
+          in: query
+          required: false
+          description: Patrón para filtrar claves (por defecto "*")
+          schema:
+            type: string
+            default: "*"
+        - name: limit
+          in: query
+          required: false
+          description: Límite de claves a retornar
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+      responses:
+        '200':
+          description: Lista de claves obtenida correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheKeysResponse'
+
+  /api/v1/cache/stats:
+    get:
+      tags:
+        - stats
+      summary: Obtener estadísticas del caché
+      description: Retorna estadísticas generales del caché y del servidor Redis
+      operationId: getCacheStats
+      responses:
+        '200':
+          description: Estadísticas obtenidas correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheStatsResponse'
+
+components:
+  schemas:
+    CacheMultipleSetRequest:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: object
+          additionalProperties:
+            type: object
+            required:
+              - value
+            properties:
+              value:
+                oneOf:
+                  - type: string
+                  - type: number
+                  - type: boolean
+                  - type: object
+                  - type: array
+                description: Valor a almacenar
+              ttl:
+                type: string
+                description: Tiempo de vida en formato duration (opcional)
+          description: Mapa de clave-valor con elementos a almacenar
+      example:
+        items:
+          user:123:
+            value: "John Doe"
+            ttl: "1h"
+          session:abc:
+            value: {"session_id": "abc123", "user_id": 123}
+            ttl: "30m"
+
+    CacheMultipleKeysRequest:
+      type: object
+      required:
+        - keys
+      properties:
+        keys:
+          type: array
+          items:
+            type: string
+          description: Lista de claves a procesar
+      example:
+        keys: ["user:123", "user:456", "session:abc"]
+
+    CacheMultipleOperationResponse:
+      type: object
+      required:
+        - message
+        - count
+      properties:
+        message:
+          type: string
+          description: Mensaje descriptivo de la operación
+        count:
+          type: integer
+          description: Número de elementos procesados
+      example:
+        message: "items stored successfully"
+        count: 3
+
+    CacheMultipleGetResponse:
+      type: object
+      required:
+        - items
+        - count
+      properties:
+        items:
+          type: object
+          additionalProperties:
+            type: object
+            required:
+              - value
+              - created_at
+              - expires_at
+              - remaining_ttl
+            properties:
+              value:
+                oneOf:
+                  - type: string
+                  - type: number
+                  - type: boolean
+                  - type: object
+                  - type: array
+                description: Valor almacenado
+              created_at:
+                type: string
+                format: date-time
+                description: Fecha de creación
+              expires_at:
+                type: string
+                format: date-time
+                description: Fecha de expiración
+              remaining_ttl:
+                type: string
+                description: TTL restante en formato duration
+          description: Mapa de claves y sus valores correspondientes
+        count:
+          type: integer
+          description: Número de elementos encontrados
+      example:
+        items:
+          user:123:
+            value: "John Doe"
+            created_at: "2025-09-28T10:00:00Z"
+            expires_at: "2025-09-28T11:00:00Z"
+            remaining_ttl: "59m30s"
+          session:abc:
+            value: {"session_id": "abc123"}
+            created_at: "2025-09-28T10:15:00Z"
+            expires_at: "2025-09-28T10:45:00Z"
+            remaining_ttl: "29m30s"
+        count: 2
+
+    CacheValueRequest:
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: object
+            - type: array
+          description: Valor a almacenar en el caché
+        ttl:
+          type: string
+          description: Tiempo de vida en formato duration (ej. "1h", "30m", "60s")
+
+      example:
+        value: "Hello World"
+        ttl: "1h"
+
+    CacheValueResponse:
+      type: object
+      required:
+        - key
+        - value
+        - created_at
+        - expires_at
+        - remaining_ttl
+      properties:
+        key:
+          type: string
+          description: Clave del elemento
+        value:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: object
+            - type: array
+          description: Valor almacenado
+        created_at:
+          type: string
+          format: date-time
+          description: Fecha y hora de creación
+        expires_at:
+          type: string
+          format: date-time
+          description: Fecha y hora de expiración
+        remaining_ttl:
+          type: string
+          description: Tiempo de vida restante en formato duration
+      example:
+        key: "user:123"
+        value: "Hello World"
+        created_at: "2025-09-28T10:00:00Z"
+        expires_at: "2025-09-28T11:00:00Z"
+        remaining_ttl: "59m30s"
+
+    CacheOperationResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Mensaje descriptivo de la operación
+      example:
+        message: "item stored successfully"
+
+    CacheTTLRequest:
+      type: object
+      required:
+        - ttl
+      properties:
+        ttl:
+          type: string
+          description: Tiempo de vida en formato duration (ej. "1h", "30m", "60s")
+      example:
+        ttl: "1h"
+
+    CacheTTLResponse:
+      type: object
+      required:
+        - key
+        - ttl
+      properties:
+        key:
+          type: string
+          description: Clave consultada
+        ttl:
+          type: string
+          description: Tiempo de vida restante en formato duration
+      example:
+        key: "user:123"
+        ttl: "59m30s"
+
+    CacheKeysResponse:
+      type: object
+      required:
+        - keys
+        - count
+        - pattern
+      properties:
+        keys:
+          type: array
+          items:
+            type: string
+          description: Lista de claves encontradas
+        count:
+          type: integer
+          description: Número total de claves encontradas
+        pattern:
+          type: string
+          description: Patrón utilizado para la búsqueda
+      example:
+        keys: ["user:123", "user:456", "session:abc"]
+        count: 3
+        pattern: "*"
+
+    CacheStatsResponse:
+      type: object
+      required:
+        - size
+        - info
+      properties:
+        size:
+          type: integer
+          description: Número total de elementos en el caché
+        info:
+          type: object
+          description: Información adicional del servidor Redis
+          additionalProperties: true
+      example:
+        size: 1250
+        info:
+          redis_version: "7.0.0"
+          used_memory: 1048576
+          connected_clients: 5
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          description: Estado del servicio
+        timestamp:
+          type: string
+          format: date-time
+          description: Marca de tiempo del health check
+        error:
+          type: string
+          description: Mensaje de error si el estado es unhealthy
+      example:
+        status: "healthy"
+        timestamp: "2025-09-28T10:00:00Z"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - timestamp
+      properties:
+        error:
+          type: string
+          description: Código de error
+        message:
+          type: string
+          description: Mensaje de error descriptivo
+        timestamp:
+          type: string
+          format: date-time
+          description: Marca de tiempo del error
+        details:
+          type: object
+          description: Detalles adicionales del error
+      example:
+        error: "KEY_NOT_FOUND"
+        message: "The requested key does not exist in the cache"
+        timestamp: "2025-09-28T10:00:00Z"
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API Key para autenticación (opcional)
+
+# Aplicar seguridad global (opcional)
+# security:
+#   - ApiKeyAuth: []
